@@ -1,25 +1,58 @@
-# ZT2CF
+# cftool
 
-Sync DNS records between ZeroTier and CloudFlare.
+A cli tool to manage Cloudflare DNS records.
 
-This repository is written by Google Gemini 2.5 Pro, published in public domain.
+Written by Google Gemini Pro & Antigravity, published in public domain.
 
-> Write a Go program using ZeroTier Central API and CloudFlare API, that when executed, sync the DNS records between a specified ZeroTier network and a specified cloudflare domain (let's say "example.com") and prefix (let's say "z"). In details: for every authorized devices in the ZeroTier network, add or update the A dns record of `<name>.<prefix>.<domain>` resolving to the device managed IP, where `<name>` is the device name in ZeroTier.
+## zt2cf
 
-## Usage
+Sync the DNS records between a specified ZeroTier network and a specified cloudflare domain (e.g. `example.com` or `z.example.com`) . For every authorized devices in the ZeroTier network, it adds or updates the A dns record of `<name>.<domain>` resolving to the device managed IP, where `<name>` is the device name in ZeroTier.
 
-Config using the following cmdline flags or environment variables:
-
-- `-zt-token`, `ZT_TOKEN` : ZeroTier Central API Token: Generate one from https://my.zerotier.com/account.
-- `-zt-network`, `ZT_NETWORK` : ZeroTier Network ID: The ID of the network you want to sync.
-- `-cf-token`, `CF_TOKEN` : Cloudflare API Token: Create one from the Cloudflare dashboard (My Profile -> API Tokens -> Create Token) with Zone:DNS:Edit permissions for the specific zone.
-- `-cf-zone`, `CF_ZONE` : Cloudflare Zone ID: Find this on the "Overview" page for your domain in the Cloudflare dashboard.
-- `-domain`, `DOMAIN` : e.g. "example.com" or "z.example.com".
-- `-delete-stale` : Enable deletion of stale DNS records in Cloudflare.
-- `-dry-run` : Enable dry run mode (log changes without applying).
-
-E.g.
+### Examples
 
 ```
-zt2cf -cf-token <cf-token> -cf-zone <cf-zone> -zt-token <zt-token> -zt-network <zt-network> -domain z.example.me -dry-run
+cftool zt2cf --cf-token <cf-token> --cf-zone <cf-zone> --zt-token <zt-token> --zt-network <zt-network> --domain z.example.me --dry-run
+```
+
+### Usage
+
+```
+      --cf-token string     Cloudflare API Token (env: CF_TOKEN)
+      --cf-zone string      Cloudflare Zone ID (env: CF_ZONE)
+      --delete-stale        Enable deletion of stale DNS records in Cloudflare
+      --domain string       Target domain (e.g., example.com or z.example.com) (env: DOMAIN)
+      --dry-run             Enable dry run mode (log changes without applying)
+  -h, --help                help for zt2cf
+      --zt-network string   ZeroTier Network ID (env: ZT_NETWORK)
+      --zt-token string     ZeroTier Central API Token (env: ZT_TOKEN)
+```
+
+## wg2cf
+
+Sync the DNS records between a specified WireGuard interface and a specified cloudflare domain (e.g. `example.com` or `w.example.com`). For every peers defined in `/etc/wireguard/<interface>.conf`, it adds or updates the A dns record of `<name>.<domain>` resolving to the peer's private IP. The peer name is read from `# Name = foo` comment; the ip is read from the first one of `AllowedIPs` list. E.g. :
+
+```
+[Peer]
+# Name = foo (any description)
+AllowedIPs = 192.168.200.100/32
+```
+
+Then it sets `foo.example.com` DNS to `192.168.200.100`. Note the name is truncated at first space.
+
+### Examples
+
+```
+cftool wg2cf --cf-token <cf-token> --cf-zone <cf-zone> --domain w.example.me --interface wg0 -dry-run
+```
+
+### Usage
+
+```
+      --cf-token string    Cloudflare API Token (env: CF_TOKEN)
+      --cf-zone string     Cloudflare Zone ID (env: CF_ZONE)
+      --delete-stale       Enable deletion of stale DNS records in Cloudflare
+      --domain string      Target domain (e.g., example.com or z.example.com) (env: DOMAIN)
+      --dry-run            Enable dry run mode (log changes without applying)
+  -h, --help               help for wg2cf
+      --interface string   WireGuard interface name (e.g., wg0) (default "wg0")
 ```

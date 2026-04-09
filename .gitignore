@@ -1,4 +1,7 @@
 *.exe
-/zt2cf
+/cftool
 /.local
 /dist
+
+# By default ignore all root dir files
+/*.*

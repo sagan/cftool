@@ -29,16 +29,6 @@ archives:
     # this name template makes the OS and Arch compatible with the results of uname.
     name_template: >-
       {{ .ProjectName }}-v{{ .Version }}-{{ .Os }}-{{ .Arch }}
-# https://goreleaser.com/customization/upx/
-upx:
-  - # Only enable upx for mips builds (For OpenWrt routers with limited flash space)
-    enabled: true
-    goarch: [mipsle]
-    compress: best
-    # Whether to try LZMA (slower).
-    lzma: true
-    # Whether to try all methods and filters (slow).
-    brute: true
 checksum:
   name_template: "checksums.txt"
 snapshot:
