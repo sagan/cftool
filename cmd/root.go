@@ -4,14 +4,13 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/sagan/cftool/version"
 	"github.com/spf13/cobra"
 )
 
-const Version = "v0.1.1"
-
 var rootCmd = &cobra.Command{
 	Use:     "cftool",
-	Version: Version,
+	Version: version.Version,
 	Short:   "cftool is a CLI tool to manage Cloudflare DNS records.",
 	Long:    `cftool is a CLI tool to manage Cloudflare DNS records.`,
 }

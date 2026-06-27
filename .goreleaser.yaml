@@ -24,6 +24,10 @@ builds:
       - mipsle
     gomips:
       - softfloat
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/sagan/cftool/version.Version={{.Version}} -X github.com/sagan/cftool/version.Commit={{.Commit}} -X github.com/sagan/cftool/version.Date={{.Date}}
 archives:
   - format: zip
     # this name template makes the OS and Arch compatible with the results of uname.

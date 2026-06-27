@@ -8,6 +8,20 @@ A cli tool to manage Cloudflare DNS records. It has several sub-commands:
 
 Written by Google Gemini Pro & Antigravity, published in public domain.
 
+- [cftool](#cftool)
+  - [zt2cf](#zt2cf)
+    - [Examples](#examples)
+    - [Usage](#usage)
+  - [wg2cf](#wg2cf)
+    - [Examples](#examples-1)
+    - [Usage](#usage-1)
+  - [cf2hosts](#cf2hosts)
+    - [Example](#example)
+    - [Usage](#usage-2)
+  - [sshfp2cf](#sshfp2cf)
+    - [Example](#example-1)
+    - [Usage](#usage-3)
+
 ## zt2cf
 
 Sync the DNS records between a specified ZeroTier network and a specified cloudflare domain (e.g. `example.com` or `z.example.com`) . For every authorized devices in the ZeroTier network, it adds or updates the A dns record of `<name>.<domain>` resolving to the device managed IP, where `<name>` is the device name in ZeroTier.
@@ -87,4 +101,27 @@ cf2hosts . --cf-token <token> --cf-zone <zone-id> --domain <example.com>
       --identifier string       Optional hosts file updating section identifier mark (env: IDENTIFIER)
       --save-srv-dir string     Directory to save SRV records for ipset (optional) (env: SAVE_SRV_DIR)
       --verbose                 Enable verbose output
+```
+
+## sshfp2cf
+
+Publish local system OpenSSH server host key finterprints to Cloudflare domain SSHFP DNS records.
+
+It automatically checks system OpenSSH server config dir (Linux: `/etc/ssh`; Windows: `%PROGRAMDATA%\ssh`), read all existing host public key files (`ssh_host_ed25519_key.pub`, `ssh_host_ecdsa_key.pub`, `ssh_host_rsa_key.pub`), calculate their sha-256 hash and upsert Cloudflare domain SSHFP DNS records.
+
+### Example
+
+```
+cftool sshfp2cf -cf-token $CF_TOKEN --cf-zone $CF_ZONE --domain example.com --domain vpn.example.com
+```
+
+### Usage
+
+```
+      --cf-token string      Cloudflare API Token (env: CF_TOKEN)
+      --cf-zone string       Cloudflare Zone ID (env: CF_ZONE)
+      --domain stringArray   Target domain (e.g., example.com). Repeatable.
+      --dry-run              Enable dry run mode (log changes without applying)
+  -h, --help                 help for sshfp2cf
+      --sshdir string        OpenSSH host key directory (default: /etc/ssh on Linux, %PROGRAMDATA%\ssh on Windows)
 ```
