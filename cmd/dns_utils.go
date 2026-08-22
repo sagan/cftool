@@ -92,6 +92,31 @@ func filterRecordsByDomain(records []cloudflare.DNSRecord, domainFlag string) []
 	return filtered
 }
 
+func formatRecordContent(r cloudflare.DNSRecord) string {
+	content := r.Content
+	if strings.EqualFold(r.Type, "SRV") {
+		if content == "" && r.Data != nil {
+			if dataMap, ok := r.Data.(map[string]interface{}); ok {
+				weight, _ := dataMap["weight"]
+				port, _ := dataMap["port"]
+				target, _ := dataMap["target"]
+				priority, hasPriority := dataMap["priority"]
+				if hasPriority && fmt.Sprintf("%v", priority) != "0" {
+					content = fmt.Sprintf("%v %v %v %v", priority, weight, port, target)
+				} else {
+					content = fmt.Sprintf("%v %v %v", weight, port, target)
+				}
+			}
+		} else if r.Priority != nil && *r.Priority > 0 {
+			fields := strings.Fields(content)
+			if len(fields) == 3 {
+				content = fmt.Sprintf("%d %s", *r.Priority, content)
+			}
+		}
+	}
+	return content
+}
+
 func formatCSV(records []cloudflare.DNSRecord, includeID bool, align bool) string {
 	headers := []string{"Name", "Type", "Content", "Proxy status", "TTL", "Comment"}
 	if includeID {
@@ -115,7 +140,7 @@ func formatCSV(records []cloudflare.DNSRecord, includeID bool, align bool) strin
 		row := []string{
 			r.Name,
 			r.Type,
-			r.Content,
+			formatRecordContent(r),
 			proxyStr,
 			ttlStr,
 			r.Comment,
@@ -331,4 +356,201 @@ func getEditor(customEditor string) (string, []string, error) {
 		return "notepad.exe", nil, nil
 	}
 	return "vi", nil, nil
+}
+
+func parseSRVContent(content string, defaultPriority *uint16) (priority, weight, port uint16, target string, err error) {
+	fields := strings.Fields(content)
+	if len(fields) == 3 {
+		p := uint16(0)
+		if defaultPriority != nil {
+			p = *defaultPriority
+		}
+		w, err := strconv.ParseUint(fields[0], 10, 16)
+		if err != nil {
+			return 0, 0, 0, "", fmt.Errorf("invalid SRV weight %q: %w", fields[0], err)
+		}
+		pt, err := strconv.ParseUint(fields[1], 10, 16)
+		if err != nil {
+			return 0, 0, 0, "", fmt.Errorf("invalid SRV port %q: %w", fields[1], err)
+		}
+		return p, uint16(w), uint16(pt), fields[2], nil
+	} else if len(fields) == 4 {
+		p, err := strconv.ParseUint(fields[0], 10, 16)
+		if err != nil {
+			return 0, 0, 0, "", fmt.Errorf("invalid SRV priority %q: %w", fields[0], err)
+		}
+		w, err := strconv.ParseUint(fields[1], 10, 16)
+		if err != nil {
+			return 0, 0, 0, "", fmt.Errorf("invalid SRV weight %q: %w", fields[1], err)
+		}
+		pt, err := strconv.ParseUint(fields[2], 10, 16)
+		if err != nil {
+			return 0, 0, 0, "", fmt.Errorf("invalid SRV port %q: %w", fields[2], err)
+		}
+		return uint16(p), uint16(w), uint16(pt), fields[3], nil
+	}
+	return 0, 0, 0, "", fmt.Errorf("invalid SRV content %q: expected 3 or 4 fields (<weight> <port> <target> or <priority> <weight> <port> <target>)", content)
+}
+
+func parseMXContent(content string, defaultPriority *uint16) (priority uint16, target string, err error) {
+	fields := strings.Fields(content)
+	if len(fields) == 2 {
+		p, err := strconv.ParseUint(fields[0], 10, 16)
+		if err == nil {
+			return uint16(p), fields[1], nil
+		}
+	} else if len(fields) == 1 {
+		p := uint16(10)
+		if defaultPriority != nil {
+			p = *defaultPriority
+		}
+		return p, fields[0], nil
+	}
+	return 0, content, fmt.Errorf("invalid MX content %q", content)
+}
+
+func buildUpdateDNSRecordParams(er DNSRow, origRec *cloudflare.DNSRecord, proxied bool, ttl int) (cloudflare.UpdateDNSRecordParams, error) {
+	params := cloudflare.UpdateDNSRecordParams{
+		ID:      er.ID,
+		Type:    er.Type,
+		Name:    er.Name,
+		Content: er.Content,
+		TTL:     ttl,
+		Proxied: cloudflare.BoolPtr(proxied),
+		Comment: cloudflare.StringPtr(er.Comment),
+	}
+
+	var defaultPriority *uint16
+	if origRec != nil {
+		defaultPriority = origRec.Priority
+	}
+
+	if strings.EqualFold(er.Type, "SRV") {
+		priority, weight, port, target, err := parseSRVContent(er.Content, defaultPriority)
+		if err != nil {
+			return params, err
+		}
+		params.Priority = &priority
+		params.Data = map[string]interface{}{
+			"priority": priority,
+			"weight":   weight,
+			"port":     port,
+			"target":   target,
+		}
+	} else if strings.EqualFold(er.Type, "MX") {
+		priority, target, err := parseMXContent(er.Content, defaultPriority)
+		if err == nil {
+			params.Priority = &priority
+			params.Content = target
+		}
+	}
+
+	return params, nil
+}
+
+func buildCreateDNSRecordParams(er DNSRow, proxied bool, ttl int) (cloudflare.CreateDNSRecordParams, error) {
+	params := cloudflare.CreateDNSRecordParams{
+		Type:    er.Type,
+		Name:    er.Name,
+		Content: er.Content,
+		TTL:     ttl,
+		Proxied: cloudflare.BoolPtr(proxied),
+		Comment: er.Comment,
+	}
+
+	if strings.EqualFold(er.Type, "SRV") {
+		priority, weight, port, target, err := parseSRVContent(er.Content, nil)
+		if err != nil {
+			return params, err
+		}
+		params.Priority = &priority
+		params.Data = map[string]interface{}{
+			"priority": priority,
+			"weight":   weight,
+			"port":     port,
+			"target":   target,
+		}
+	} else if strings.EqualFold(er.Type, "MX") {
+		priority, target, err := parseMXContent(er.Content, nil)
+		if err == nil {
+			params.Priority = &priority
+			params.Content = target
+		}
+	}
+
+	return params, nil
+}
+
+func getSRVFields(r cloudflare.DNSRecord) (priority, weight, port uint16, target string, ok bool) {
+	if r.Data != nil {
+		if dataMap, okMap := r.Data.(map[string]interface{}); okMap {
+			var p, w, pt uint64
+			if v, exists := dataMap["priority"]; exists {
+				p, _ = strconv.ParseUint(fmt.Sprintf("%v", v), 10, 16)
+			} else if r.Priority != nil {
+				p = uint64(*r.Priority)
+			}
+			if v, exists := dataMap["weight"]; exists {
+				w, _ = strconv.ParseUint(fmt.Sprintf("%v", v), 10, 16)
+			}
+			if v, exists := dataMap["port"]; exists {
+				pt, _ = strconv.ParseUint(fmt.Sprintf("%v", v), 10, 16)
+			}
+			tgt, _ := dataMap["target"].(string)
+			if tgt != "" || pt != 0 || w != 0 {
+				return uint16(p), uint16(w), uint16(pt), tgt, true
+			}
+		}
+	}
+	p, w, pt, tgt, err := parseSRVContent(r.Content, r.Priority)
+	if err == nil {
+		return p, w, pt, tgt, true
+	}
+	return 0, 0, 0, "", false
+}
+
+func isRecordEqual(er DNSRow, origRec cloudflare.DNSRecord, proxied bool, ttl int) bool {
+	if !strings.EqualFold(er.Name, origRec.Name) {
+		return false
+	}
+	if !strings.EqualFold(er.Type, origRec.Type) {
+		return false
+	}
+	origProxied := origRec.Proxied != nil && *origRec.Proxied
+	if proxied != origProxied {
+		return false
+	}
+	if ttl != origRec.TTL {
+		return false
+	}
+	if er.Comment != origRec.Comment {
+		return false
+	}
+
+	if strings.EqualFold(er.Type, "SRV") {
+		erP, erW, erPt, erTgt, err := parseSRVContent(er.Content, origRec.Priority)
+		if err != nil {
+			return false
+		}
+		origP, origW, origPt, origTgt, ok := getSRVFields(origRec)
+		if !ok {
+			return false
+		}
+		return erP == origP && erW == origW && erPt == origPt && strings.EqualFold(strings.TrimSuffix(erTgt, "."), strings.TrimSuffix(origTgt, "."))
+	}
+
+	if strings.EqualFold(er.Type, "MX") {
+		erP, erTgt, err := parseMXContent(er.Content, origRec.Priority)
+		if err != nil {
+			return false
+		}
+		origP := uint16(10)
+		if origRec.Priority != nil {
+			origP = *origRec.Priority
+		}
+		_, origTgt, _ := parseMXContent(origRec.Content, origRec.Priority)
+		return erP == origP && strings.EqualFold(strings.TrimSuffix(erTgt, "."), strings.TrimSuffix(origTgt, "."))
+	}
+
+	return er.Content == origRec.Content
 }

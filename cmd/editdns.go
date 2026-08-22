@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"strings"
 
 	cloudflare "github.com/cloudflare/cloudflare-go"
 	"github.com/spf13/cobra"
@@ -125,25 +124,15 @@ func runEditDns() error {
 		if er.ID != "" {
 			if origRec, exists := origMap[er.ID]; exists {
 				keptIDs[er.ID] = true
-				origProxied := origRec.Proxied != nil && *origRec.Proxied
 
-				if !strings.EqualFold(er.Name, origRec.Name) ||
-					!strings.EqualFold(er.Type, origRec.Type) ||
-					er.Content != origRec.Content ||
-					proxied != origProxied ||
-					ttl != origRec.TTL ||
-					er.Comment != origRec.Comment {
+				if !isRecordEqual(er, origRec, proxied, ttl) {
+					params, err := buildUpdateDNSRecordParams(er, &origRec, proxied, ttl)
+					if err != nil {
+						return fmt.Errorf("error preparing update for record %s (ID %s): %w", er.Name, er.ID, err)
+					}
 
 					toUpdate = append(toUpdate, UpdateItem{
-						Params: cloudflare.UpdateDNSRecordParams{
-							ID:      er.ID,
-							Type:    er.Type,
-							Name:    er.Name,
-							Content: er.Content,
-							TTL:     ttl,
-							Proxied: cloudflare.BoolPtr(proxied),
-							Comment: cloudflare.StringPtr(er.Comment),
-						},
+						Params: params,
 						Target: er.Name,
 					})
 				}
@@ -154,13 +143,7 @@ func runEditDns() error {
 		matchedOrigID := ""
 		for _, origRec := range filteredRecords {
 			if !keptIDs[origRec.ID] {
-				origProxied := origRec.Proxied != nil && *origRec.Proxied
-				if strings.EqualFold(er.Name, origRec.Name) &&
-					strings.EqualFold(er.Type, origRec.Type) &&
-					er.Content == origRec.Content &&
-					proxied == origProxied &&
-					ttl == origRec.TTL &&
-					er.Comment == origRec.Comment {
+				if isRecordEqual(er, origRec, proxied, ttl) {
 					matchedOrigID = origRec.ID
 					break
 				}
@@ -170,14 +153,11 @@ func runEditDns() error {
 		if matchedOrigID != "" {
 			keptIDs[matchedOrigID] = true
 		} else {
-			toCreate = append(toCreate, cloudflare.CreateDNSRecordParams{
-				Type:    er.Type,
-				Name:    er.Name,
-				Content: er.Content,
-				TTL:     ttl,
-				Proxied: cloudflare.BoolPtr(proxied),
-				Comment: er.Comment,
-			})
+			createParams, err := buildCreateDNSRecordParams(er, proxied, ttl)
+			if err != nil {
+				return fmt.Errorf("error preparing create for record %s: %w", er.Name, err)
+			}
+			toCreate = append(toCreate, createParams)
 		}
 	}
 
