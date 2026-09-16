@@ -4,6 +4,7 @@ A cli tool to manage Cloudflare DNS records. It has several sub-commands:
 
 - `zt2cf` : Sync DNS records from ZeroTier to Cloudflare.
 - `wg2cf` : Sync DNS records from WireGuard to Cloudflare.
+- `ts2cf` : Sync DNS records from Tailscale to Cloudflare.
 - `cf2hosts` : Sync DNS records from Cloudflare to local hosts file.
 
 Written by Google Gemini Pro & Antigravity, published in public domain.
@@ -15,12 +16,15 @@ Written by Google Gemini Pro & Antigravity, published in public domain.
   - [wg2cf](#wg2cf)
     - [Examples](#examples-1)
     - [Usage](#usage-1)
+  - [ts2cf](#ts2cf)
+    - [Examples](#examples-2)
+    - [Usage](#usage-2)
   - [cf2hosts](#cf2hosts)
     - [Example](#example)
-    - [Usage](#usage-2)
+    - [Usage](#usage-3)
   - [sshfp2cf](#sshfp2cf)
     - [Example](#example-1)
-    - [Usage](#usage-3)
+    - [Usage](#usage-4)
 
 ## zt2cf
 
@@ -73,6 +77,35 @@ cftool wg2cf --cf-token <cf-token> --cf-zone <cf-zone> --domain w.example.me --i
       --dry-run            Enable dry run mode (log changes without applying)
   -h, --help               help for wg2cf
       --interface string   WireGuard interface name (e.g., wg0) (default "wg0")
+```
+
+## ts2cf
+
+Sync the DNS records between Tailscale network devices and a specified Cloudflare domain (e.g. `example.com` or `ts.example.com`). It reads devices directly from `tailscale status --json`, and adds or updates the Cloudflare A DNS record of `<name>.<domain>` resolving to each device's Tailscale IPv4 address. The device name is extracted from MagicDNS `DNSName` (preferred) or `HostName`.
+
+### Examples
+
+```
+cftool ts2cf --cf-token <cf-token> --cf-zone <cf-zone> --domain ts.example.me --dry-run
+```
+
+Sync using a saved status JSON file or stdin:
+```
+tailscale status --json | cftool ts2cf --cf-token <cf-token> --cf-zone <cf-zone> --domain ts.example.me --status-file -
+```
+
+### Usage
+
+```
+      --cf-token string        Cloudflare API Token (env: CF_TOKEN)
+      --cf-zone string         Cloudflare Zone ID (env: CF_ZONE)
+      --delete-stale           Enable deletion of stale DNS records in Cloudflare
+      --domain string          Target domain (e.g., example.com or ts.example.com) (env: DOMAIN)
+      --dry-run                Enable dry run mode (log changes without applying)
+  -h, --help                   help for ts2cf
+      --include-self           Include local device (Self) in DNS sync (default true)
+      --status-file string     Read tailscale status JSON from file or stdin (-) instead of running tailscale CLI (env: TAILSCALE_STATUS_FILE)
+      --tailscale-bin string   Tailscale binary path or name (env: TAILSCALE_BIN) (default "tailscale")
 ```
 
 ## cf2hosts
